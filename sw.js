@@ -1,6 +1,5 @@
-const VERSION='spain-trip-v4.3.0';
+const VERSION='spain-trip-v4.4.0';
 const APP=`${VERSION}-app`;
-const RUNTIME=`${VERSION}-runtime`;
 const CORE=['./','./index.html','./styles.css','./app.js','./manifest.webmanifest','./itinerary.enc.json',
 './icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-512.png','./icons/apple-touch-icon.png'];
 
@@ -8,7 +7,7 @@ self.addEventListener('install',e=>{
   e.waitUntil(caches.open(APP).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()));
 });
 self.addEventListener('activate',e=>{
-  e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>![APP,RUNTIME].includes(k)).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));
+  e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==APP).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));
 });
 self.addEventListener('fetch',e=>{
   const r=e.request;if(r.method!=='GET')return;
@@ -26,12 +25,5 @@ self.addEventListener('fetch',e=>{
         .catch(()=>caches.match(r))
     );
     return;
-  }
-
-  if(u.hostname.includes('unpkg.com')||u.hostname.includes('tiles.openfreemap.org')){
-    e.respondWith(caches.open(RUNTIME).then(c=>c.match(r).then(cached=>{
-      const net=fetch(r).then(res=>{if(res&&(res.ok||res.type==='opaque'))c.put(r,res.clone());return res;}).catch(()=>cached);
-      return cached||net;
-    })));
   }
 });

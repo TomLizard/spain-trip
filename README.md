@@ -1,4 +1,4 @@
-# Spain Trip V4.3 — Private PWA
+# Spain Trip V4.4 — Performance PWA
 
 ## 핵심 변경
 - 일정/숙소 주소는 `itinerary.enc.json` 안에 AES-256-GCM으로 암호화
@@ -75,3 +75,20 @@
 - 한글화는 필요한 지명 레이어만, 최초 1회, 브라우저 idle 시점에 적용
 - 지도 fade/world-copy/collision 비용 일부 축소
 - Service Worker 캐시 버전 4.3으로 갱신
+
+## V4.4 성능 우선 구조 변경
+실제 iPhone 사용 시 MapLibre/OpenFreeMap 벡터 지도가 계속 타일·글리프·스타일을 처리하고,
+Service Worker가 그 요청들을 런타임 캐시에 저장하면서 백그라운드 I/O가 커질 수 있어
+지도 엔진을 근본적으로 경량화했습니다.
+
+- MapLibre 벡터 지도 제거
+- Leaflet + OpenStreetMap raster로 복귀
+- API Key 불필요
+- zoom/fade/marker 애니메이션 비활성화
+- Canvas 우선 렌더링
+- idle 시에만 타일 갱신
+- retina 2x 타일 요청 비활성화
+- Service Worker는 앱 본체만 캐시
+- 지도 타일 / CDN 요청은 Service Worker가 가로채거나 Cache Storage에 쓰지 않음
+- 날짜 변경 시 모든 이전 마커/경로를 완전히 제거 후 새로 그림
+- 기본 지도는 현지어 라벨이지만, 일정 목적지 마커 tooltip은 한국어로 표시

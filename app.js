@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '4.3.0';
+const APP_VERSION = '4.4.0';
 const STORE = {
   completed:'spainTrip.completed.v4',
   lastDay:'spainTrip.lastDay.v4',
@@ -261,116 +261,49 @@ function editReservation(r){
   renderPlace(); toast('예약 시간이 이 iPhone에 저장되었습니다.');
 }
 
-let koreanLabelsApplied = false;
-
-function setKoreanLabelsOnce(){
-  if(koreanLabelsApplied || !map || !map.getStyle) return;
-
-  // Only update the useful name layers once.
-  // Rewriting every symbol layer repeatedly caused a styledata -> setLayoutProperty
-  // feedback loop on iPhone Safari and made the whole UI almost unresponsive.
-  const layerIds = [
-    'label_country_1','label_country_2','label_country_3',
-    'label_state','label_city_capital','label_city','label_town',
-    'label_village','label_other',
-    'airport',
-    'water_name_line_label','water_name_point_label','waterway_line_label',
-    'highway-name-major','highway-name-minor','highway-name-path'
-  ];
-
-  layerIds.forEach(id=>{
-    const layer = map.getLayer(id);
-    if(!layer) return;
-
-    const original = map.getLayoutProperty(id,'text-field');
-    if(!original) return;
-
-    // Do not wrap a layer twice.
-    try{
-      if(JSON.stringify(original).includes('name:ko')) return;
-    }catch(e){}
-
-    try{
-      map.setLayoutProperty(id,'text-field',[
-        'coalesce',
-        ['get','name:ko'],
-        ['get','name_ko'],
-        original
-      ]);
-    }catch(e){}
-  });
-
-  koreanLabelsApplied = true;
-}
-
-function scheduleKoreanLabels(){
-  const run = () => {
-    try{ setKoreanLabelsOnce(); }catch(e){}
-  };
-  if('requestIdleCallback' in window){
-    requestIdleCallback(run, {timeout:1200});
-  }else{
-    setTimeout(run, 450);
-  }
-}
-
 function initMap(){
-  if(typeof maplibregl === 'undefined'){
+  if(typeof L === 'undefined'){
     $('#offlineMap').classList.remove('hidden');
     return;
   }
-  map = new maplibregl.Map({
-    container:'map',
-    style:'https://tiles.openfreemap.org/styles/bright',
-    center:[-3.7038,40.4168],
-    zoom:12,
+
+  map = L.map('map',{
+    zoomControl:false,
     attributionControl:true,
-    localIdeographFontFamily:'Apple SD Gothic Neo',
-    renderWorldCopies:false,
-    fadeDuration:0,
-    crossSourceCollisions:false
-  });
-  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-left');
-
-  map.on('load',()=>{
-    mapLoaded = true;
-
-    map.addSource('trip-route',{
-      type:'geojson',
-      data:{type:'Feature',geometry:{type:'LineString',coordinates:[]}}
-    });
-    map.addLayer({
-      id:'trip-route-line',
-      type:'line',
-      source:'trip-route',
-      layout:{'line-cap':'round','line-join':'round'},
-      paint:{
-        'line-color':'#226fc4',
-        'line-width':4,
-        'line-opacity':0.75,
-        'line-dasharray':[1.4,1.5]
-      }
-    });
-
-    rebuildMap();
-    requestAnimationFrame(()=>map.resize());
-    setTimeout(()=>map.resize(),250);
-    setTimeout(()=>map.resize(),700);
-
-    // Korean labels are applied only once and when the browser is idle.
-    scheduleKoreanLabels();
+    preferCanvas:true,
+    zoomAnimation:false,
+    fadeAnimation:false,
+    markerZoomAnimation:false
   });
 
-  map.on('error',()=>{
-    if(!navigator.onLine) $('#offlineMap').classList.remove('hidden');
-  });
+  // Performance-first, keyless raster map.
+  // Browser HTTP cache is used normally; the Service Worker does NOT cache every tile.
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19,
+    minZoom:2,
+    attribution:'&copy; OpenStreetMap contributors',
+    updateWhenIdle:true,
+    updateWhenZooming:false,
+    keepBuffer:1,
+    detectRetina:false,
+    crossOrigin:true
+  }).addTo(map);
+
+  L.control.zoom({position:'bottomleft'}).addTo(map);
+  mapLoaded = true;
+  rebuildMap();
+
+  requestAnimationFrame(()=>map.invalidateSize(false));
+  setTimeout(()=>map.invalidateSize(false),180);
 }
 
-function markerElement(num, color, selected, done){
-  const el=document.createElement('div');
-  el.className='maplibre-route-marker';
-  el.innerHTML=`<div class="route-pin ${selected?'selected':''} ${done?'done':''}" style="background:${color}">${num}</div>`;
-  return el;
+function markerIcon(num, color, selected, done){
+  return L.divIcon({
+    className:'',
+    html:`<div class="route-pin ${selected?'selected':''} ${done?'done':''}" style="background:${color}">${num}</div>`,
+    iconSize:selected?[43,43]:[34,34],
+    iconAnchor:selected?[21,21]:[17,17]
+  });
 }
 
 function clearMapVisuals(){
@@ -382,95 +315,128 @@ function clearMapVisuals(){
   });
   markers=[];
 
-  if(map && mapLoaded){
-    const src=map.getSource('trip-route');
-    if(src){
-      src.setData({
-        type:'Feature',
-        properties:{},
-        geometry:{type:'LineString',coordinates:[]}
-      });
-    }
+  if(routeLayer){
+    try{ routeLayer.remove(); }catch(e){}
+    routeLayer=null;
   }
 }
 
 function rebuildMap(){
   if(!map || !mapLoaded) return;
+
   clearMapVisuals();
+
   const day=TRIP.days[currentDayIndex];
   const color=dayColor(day);
   const pts=day.items.filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lng));
 
-  const src=map.getSource('trip-route');
-  if(src){
-    src.setData({
-      type:'Feature',
-      properties:{},
-      geometry:{type:'LineString',coordinates:pts.map(x=>[x.lng,x.lat])}
-    });
-  }
-  if(map.getLayer('trip-route-line')){
-    map.setPaintProperty('trip-route-line','line-color',color);
+  if(pts.length){
+    routeLayer=L.polyline(
+      pts.map(x=>[x.lat,x.lng]),
+      {color,weight:4,opacity:.72,dashArray:'7 8',lineCap:'round',lineJoin:'round',interactive:false}
+    ).addTo(map);
   }
 
   day.items.forEach((it,i)=>{
     if(!Number.isFinite(it.lat)||!Number.isFinite(it.lng)) return;
-    const el=markerElement(i+1,color,i===currentStopIndex,completed.has(it.id));
-    el.addEventListener('click',()=>selectStop(i,false));
-    const marker=new maplibregl.Marker({element:el,anchor:'center'})
-      .setLngLat([it.lng,it.lat]).addTo(map);
+
+    const marker=L.marker(
+      [it.lat,it.lng],
+      {icon:markerIcon(i+1,color,i===currentStopIndex,completed.has(it.id)),keyboard:false,riseOnHover:false}
+    ).addTo(map);
+
+    // Korean itinerary name is available directly on our marker even if the raster basemap
+    // itself uses local-language labels.
+    marker.bindTooltip(it.name,{
+      direction:'top',
+      offset:[0,-17],
+      opacity:.94,
+      className:'trip-tooltip'
+    });
+
+    marker.on('click',()=>selectStop(i,false));
     markers.push({marker,itemIndex:i});
   });
+
   fitRoute();
 }
 
 function updateMarkers(){
   if(!map || !mapLoaded) return;
-  const day=TRIP.days[currentDayIndex],color=dayColor(day);
+
+  const day=TRIP.days[currentDayIndex];
+  const color=dayColor(day);
+
   markers.forEach(entry=>{
     const i=entry.itemIndex;
     const it=day.items[i];
     if(!it) return;
-    const el=entry.marker.getElement();
-    el.innerHTML=`<div class="route-pin ${i===currentStopIndex?'selected':''} ${completed.has(it.id)?'done':''}" style="background:${color}">${i+1}</div>`;
+
+    entry.marker.setIcon(
+      markerIcon(i+1,color,i===currentStopIndex,completed.has(it.id))
+    );
   });
 }
 
 function fitRoute(){
   if(!map || !mapLoaded) return;
-  const pts=TRIP.days[currentDayIndex].items.filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lng));
+
+  const pts=TRIP.days[currentDayIndex].items
+    .filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lng))
+    .map(x=>[x.lat,x.lng]);
+
   if(!pts.length) return;
+
   if(pts.length===1){
-    map.jumpTo({center:[pts[0].lng,pts[0].lat],zoom:15});
-    return;
+    map.setView(pts[0],15,{animate:false});
+  }else{
+    map.fitBounds(pts,{padding:[30,30],animate:false,maxZoom:15});
   }
-  const bounds=new maplibregl.LngLatBounds();
-  pts.forEach(x=>bounds.extend([x.lng,x.lat]));
-  map.fitBounds(bounds,{padding:{top:46,bottom:46,left:40,right:40},duration:0,maxZoom:15});
 }
 
 function centerSelected(){
   if(!map || !mapLoaded) return;
+
   const it=TRIP.days[currentDayIndex].items[currentStopIndex];
   if(Number.isFinite(it.lat)&&Number.isFinite(it.lng)){
-    map.easeTo({center:[it.lng,it.lat],zoom:15,duration:350});
+    map.setView([it.lat,it.lng],15,{animate:false});
   }
 }
 
 function requestMyLocation(center=true){
   if(!navigator.geolocation) return toast('위치 기능을 사용할 수 없습니다.');
+
   navigator.geolocation.getCurrentPosition(pos=>{
     userLocation={lat:pos.coords.latitude,lng:pos.coords.longitude};
+
     if(map && mapLoaded){
-      if(userMarker) userMarker.remove();
-      const el=document.createElement('div');
-      el.className='user-location-marker';
-      userMarker=new maplibregl.Marker({element:el,anchor:'center'})
-        .setLngLat([userLocation.lng,userLocation.lat]).addTo(map);
-      if(center) map.easeTo({center:[userLocation.lng,userLocation.lat],zoom:15,duration:350});
+      if(userMarker){
+        try{ userMarker.remove(); }catch(e){}
+      }
+
+      userMarker=L.circleMarker(
+        [userLocation.lat,userLocation.lng],
+        {
+          radius:8,
+          color:'#fff',
+          weight:3,
+          fillColor:'#2385ff',
+          fillOpacity:1,
+          interactive:false
+        }
+      ).addTo(map);
+
+      if(center){
+        map.setView([userLocation.lat,userLocation.lng],15,{animate:false});
+      }
     }
+
     toast('현재 위치를 확인했습니다.');
-  },()=>toast('위치 권한을 허용해 주세요.'),{enableHighAccuracy:true,timeout:8000});
+  },()=>toast('위치 권한을 허용해 주세요.'),{
+    enableHighAccuracy:true,
+    timeout:8000,
+    maximumAge:30000
+  });
 }
 
 function googleDirections(origin, dest, mode='walking'){
@@ -665,8 +631,8 @@ async function bootstrap(){
   $('#versionText').textContent=`v${APP_VERSION}`;
   window.addEventListener('online',()=>{updateNetwork();loadWeather(false);});
   window.addEventListener('offline',updateNetwork);
-  window.addEventListener('resize',()=>{ if(map && mapLoaded) setTimeout(()=>map.resize(),60); });
-  window.addEventListener('orientationchange',()=>{ if(map && mapLoaded) setTimeout(()=>map.resize(),250); });
+  window.addEventListener('resize',()=>{ if(map && mapLoaded) setTimeout(()=>map.invalidateSize(false),60); });
+  window.addEventListener('orientationchange',()=>{ if(map && mapLoaded) setTimeout(()=>map.invalidateSize(false),250); });
 }
 bootstrap();
 
