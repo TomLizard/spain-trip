@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '4.4.0';
+const APP_VERSION = '4.5.0';
 const STORE = {
   completed:'spainTrip.completed.v4',
   lastDay:'spainTrip.lastDay.v4',
@@ -212,7 +212,9 @@ function renderPlace(){
   $('#placeTime').textContent = item.time;
   $('#placeNumber').textContent = String(currentStopIndex+1).padStart(2,'0');
   $('#placeName').textContent = item.name;
-  $('#placeNote').textContent = item.note || '';
+  $('#placeNote').textContent =
+    (item.note || '') +
+    (item.mapVisible===false ? ' · 정확한 장소 미정이라 지도 마커는 표시하지 않음' : '');
   $('#movementText').textContent = item.transport || '이동 메모 없음';
 
   const done = completed.has(item.id);
@@ -328,7 +330,7 @@ function rebuildMap(){
 
   const day=TRIP.days[currentDayIndex];
   const color=dayColor(day);
-  const pts=day.items.filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lng));
+  const pts=day.items.filter(x=>x.mapVisible!==false&&Number.isFinite(x.lat)&&Number.isFinite(x.lng));
 
   if(pts.length){
     routeLayer=L.polyline(
@@ -338,6 +340,7 @@ function rebuildMap(){
   }
 
   day.items.forEach((it,i)=>{
+    if(it.mapVisible===false) return;
     if(!Number.isFinite(it.lat)||!Number.isFinite(it.lng)) return;
 
     const marker=L.marker(
@@ -382,7 +385,7 @@ function fitRoute(){
   if(!map || !mapLoaded) return;
 
   const pts=TRIP.days[currentDayIndex].items
-    .filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lng))
+    .filter(x=>x.mapVisible!==false&&Number.isFinite(x.lat)&&Number.isFinite(x.lng))
     .map(x=>[x.lat,x.lng]);
 
   if(!pts.length) return;
@@ -398,6 +401,10 @@ function centerSelected(){
   if(!map || !mapLoaded) return;
 
   const it=TRIP.days[currentDayIndex].items[currentStopIndex];
+  if(it.mapVisible===false){
+    toast('이 일정은 정확한 장소가 아직 정해지지 않아 지도 마커를 표시하지 않았습니다.');
+    return;
+  }
   if(Number.isFinite(it.lat)&&Number.isFinite(it.lng)){
     map.setView([it.lat,it.lng],15,{animate:false});
   }

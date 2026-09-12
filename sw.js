@@ -1,4 +1,4 @@
-const VERSION='spain-trip-v4.4.0';
+const VERSION='spain-trip-v4.5.0';
 const APP=`${VERSION}-app`;
 const CORE=['./','./index.html','./styles.css','./app.js','./manifest.webmanifest','./itinerary.enc.json',
 './icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-512.png','./icons/apple-touch-icon.png'];

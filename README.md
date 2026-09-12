@@ -1,4 +1,4 @@
-# Spain Trip V4.4 — Performance PWA
+# Spain Trip V4.5 — Coordinate Fix
 
 ## 핵심 변경
 - 일정/숙소 주소는 `itinerary.enc.json` 안에 AES-256-GCM으로 암호화
@@ -92,3 +92,13 @@ Service Worker가 그 요청들을 런타임 캐시에 저장하면서 백그라
 - 지도 타일 / CDN 요청은 Service Worker가 가로채거나 Cache Storage에 쓰지 않음
 - 날짜 변경 시 모든 이전 마커/경로를 완전히 제거 후 새로 그림
 - 기본 지도는 현지어 라벨이지만, 일정 목적지 마커 tooltip은 한국어로 표시
+
+## V4.5 위치 정확도 수정
+- 임시로 잡아 둔 식사/버스/일반 케이블카 위치를 지도에서 제거
+- 이런 일정은 시간표/카드에는 남지만 지도에는 가짜 마커를 만들지 않음
+- 지도 경로선도 실제로 표시 가능한 목적지만 연결
+- Prado, Thyssen, Retiro Lake, Puerta de Alcalá, Cibeles, Metrópolis,
+  Círculo de Bellas Artes, Royal Palace, Metropolitano, Templo de Debod,
+  Barcelona Sants, Park Güell, Sant Pau, Casa Batlló, Plaça Catalunya,
+  Palau de la Música 등의 좌표를 재검증/보정
+- 지도 마커 숫자는 일정 번호를 그대로 유지하므로 식사 등이 빠진 날에는 번호가 건너뛸 수 있음
