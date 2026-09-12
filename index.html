@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#f3f5f8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Spain Trip">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Spain Trip</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="lockScreen" class="lock-screen">
+    <div class="lock-card">
+      <div class="lock-icon">🔒</div>
+      <h1>Spain Trip</h1>
+      <p>여행 일정은 암호화되어 있습니다.</p>
+      <label class="field-label" for="passwordInput">여행 암호</label>
+      <input id="passwordInput" class="password-input" type="password" autocomplete="current-password" placeholder="암호 입력">
+      <label class="remember-row">
+        <input id="rememberDevice" type="checkbox">
+        <span>이 iPhone에서 잠금 해제 기억하기</span>
+      </label>
+      <button id="unlockBtn" class="primary-btn">일정 열기</button>
+      <div id="unlockError" class="error-text"></div>
+      <div class="privacy-hint">암호와 복호화된 일정은 GitHub 저장소에 저장되지 않습니다.</div>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow" id="todayLabel">SPAIN 2026</div>
+        <div class="brand-row">
+          <h1 id="dayTitle">Spain Trip</h1>
+          <span id="networkBadge" class="network-badge">ONLINE</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button id="weatherBtn" class="icon-btn" aria-label="날씨">☀️</button>
+        <button id="settingsBtn" class="icon-btn" aria-label="설정">⚙️</button>
+      </div>
+    </header>
+
+    <nav id="dateTabs" class="date-tabs"></nav>
+
+    <main class="map-stage">
+      <div id="map"></div>
+      <div id="offlineMap" class="offline-map hidden">
+        <div>🗺️</div>
+        <strong>오프라인 지도</strong>
+        <span>일정은 계속 사용할 수 있습니다.</span>
+      </div>
+
+      <div class="map-fab-column">
+        <button id="myLocationBtn" class="map-fab" title="내 위치">◎</button>
+        <button id="homeBtn" class="map-fab home-fab" title="숙소로">⌂</button>
+        <button id="fitRouteBtn" class="map-fab" title="전체 루트">⤢</button>
+      </div>
+
+      <div id="weatherPill" class="weather-pill hidden"></div>
+
+      <div class="route-info">
+        <span id="routeCount">0 stops</span>
+        <span class="separator">•</span>
+        <span id="completionCount">0 완료</span>
+      </div>
+    </main>
+
+    <section class="control-deck">
+      <div id="stepRail" class="step-rail"></div>
+
+      <article class="place-card">
+        <div class="place-topline">
+          <div>
+            <div id="placeTime" class="place-time"></div>
+            <div class="place-title-row">
+              <span id="placeNumber" class="place-number">01</span>
+              <h2 id="placeName">장소</h2>
+            </div>
+          </div>
+          <button id="completeBtn" class="complete-btn">✓ 완료</button>
+        </div>
+
+        <p id="placeNote" class="place-note"></p>
+
+        <div id="reservationBox" class="reservation-box hidden"></div>
+
+        <div class="movement-card">
+          <div>
+            <span class="mini-label">이동</span>
+            <strong id="movementText"></strong>
+          </div>
+          <div class="movement-actions">
+            <button id="toCurrentBtn" class="soft-btn">내 위치→여기</button>
+            <button id="toNextBtn" class="soft-btn">다음 장소</button>
+          </div>
+        </div>
+
+        <div class="quick-grid">
+          <button class="quick-btn nearby" data-query="restaurants">🍽️<span>식당</span></button>
+          <button class="quick-btn nearby" data-query="cafe">☕<span>카페</span></button>
+          <button class="quick-btn nearby" data-query="pharmacy">💊<span>약국</span></button>
+          <button class="quick-btn nearby" data-query="supermarket">🛒<span>마트</span></button>
+        </div>
+      </article>
+    </section>
+
+    <div id="sheetBackdrop" class="sheet-backdrop hidden"></div>
+
+    <section id="weatherSheet" class="bottom-sheet hidden">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <div>
+          <div class="eyebrow">TRIP INFO</div>
+          <h3>여행 당일 정보</h3>
+        </div>
+        <button class="icon-btn close-sheet">✕</button>
+      </div>
+      <div id="weatherContent" class="sheet-body"></div>
+      <button id="refreshWeatherBtn" class="secondary-btn">날씨 새로고침</button>
+    </section>
+
+    <section id="settingsSheet" class="bottom-sheet hidden">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <div>
+          <div class="eyebrow">SETTINGS</div>
+          <h3>설정 · 안정성</h3>
+        </div>
+        <button class="icon-btn close-sheet">✕</button>
+      </div>
+      <div class="sheet-body settings-list">
+        <button id="lockNowBtn" class="setting-row">
+          <span>🔒 지금 잠그기</span><small>복호화된 데이터를 화면에서 제거</small>
+        </button>
+        <button id="forgetKeyBtn" class="setting-row">
+          <span>🧹 이 iPhone의 잠금 기억 삭제</span><small>다음 실행부터 암호 다시 입력</small>
+        </button>
+        <button id="exportProgressBtn" class="setting-row">
+          <span>💾 진행상황 백업</span><small>완료 장소·수정 예약시간 저장</small>
+        </button>
+        <label class="setting-row file-row">
+          <span>📥 진행상황 복원</span><small>백업 JSON 불러오기</small>
+          <input id="importProgressInput" type="file" accept="application/json">
+        </label>
+        <button id="checkUpdateBtn" class="setting-row">
+          <span>↻ 앱 업데이트 확인</span><small id="versionText">v4</small>
+        </button>
+        <button id="clearRuntimeBtn" class="setting-row danger-row">
+          <span>🗑️ 로컬 상태 초기화</span><small>완료/선택/날씨 캐시만 삭제</small>
+        </button>
+      </div>
+    </section>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="./app.js"></script>
+</body>
+</html>
