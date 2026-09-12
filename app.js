@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '4.0.0';
+const APP_VERSION = '4.1.0';
 const STORE = {
   completed:'spainTrip.completed.v4',
   lastDay:'spainTrip.lastDay.v4',
@@ -18,6 +18,7 @@ let map = null;
 let routeLayer = null;
 let markers = [];
 let userMarker = null;
+let mapLoaded = false;
 let userLocation = null;
 let completed = new Set(JSON.parse(localStorage.getItem(STORE.completed) || '[]'));
 let reservationEdits = JSON.parse(localStorage.getItem(STORE.reservationEdits) || '{}');
@@ -131,6 +132,17 @@ function dayISO(day){
 }
 function toQueryPlace(item){ return encodeURIComponent(item.address || item.note || item.name); }
 
+function revealHorizontal(container, child){
+  if(!container || !child) return;
+  const left = child.offsetLeft - 14;
+  const right = child.offsetLeft + child.offsetWidth + 22;
+  if(left < container.scrollLeft){
+    container.scrollTo({left:Math.max(0,left),behavior:'smooth'});
+  }else if(right > container.scrollLeft + container.clientWidth){
+    container.scrollTo({left:Math.max(0,right-container.clientWidth),behavior:'smooth'});
+  }
+}
+
 function renderTabs(){
   const wrap = $('#dateTabs');
   wrap.innerHTML = '';
@@ -147,7 +159,7 @@ function renderTabs(){
     };
     wrap.appendChild(btn);
   });
-  wrap.children[currentDayIndex]?.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
+  requestAnimationFrame(()=>revealHorizontal(wrap, wrap.children[currentDayIndex]));
 }
 
 function renderDay(){
@@ -175,7 +187,7 @@ function renderStepRail(){
     b.onclick = () => selectStop(i, true);
     rail.appendChild(b);
   });
-  rail.children[currentStopIndex]?.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
+  requestAnimationFrame(()=>revealHorizontal(rail, rail.children[currentStopIndex]));
 }
 
 function reservationFor(item){
@@ -240,75 +252,153 @@ function editReservation(r){
   renderPlace(); toast('예약 시간이 이 iPhone에 저장되었습니다.');
 }
 
-function initMap(){
-  if(typeof L === 'undefined'){
-    $('#offlineMap').classList.remove('hidden');
-    return;
-  }
-  map = L.map('map',{zoomControl:false, attributionControl:true});
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
-    maxZoom:20,subdomains:'abcd',attribution:'&copy; OSM &copy; CARTO'
-  }).addTo(map);
-  L.control.zoom({position:'bottomleft'}).addTo(map);
-  rebuildMap();
-}
-
-function markerIcon(num, color, selected, done){
-  return L.divIcon({
-    className:'',
-    html:`<div class="route-pin ${selected?'selected':''} ${done?'done':''}" style="background:${color}">${num}</div>`,
-    iconSize:selected?[43,43]:[34,34],iconAnchor:selected?[21,21]:[17,17]
+function setKoreanLabels(){
+  if(!map || !map.getStyle) return;
+  const layers = map.getStyle().layers || [];
+  layers.forEach(layer=>{
+    if(layer.type !== 'symbol') return;
+    const original = layer.layout && layer.layout['text-field'];
+    if(!original) return;
+    try{
+      map.setLayoutProperty(layer.id,'text-field',[
+        'coalesce',
+        ['get','name:ko'],
+        ['get','name_ko'],
+        original
+      ]);
+    }catch(e){}
   });
 }
 
+function initMap(){
+  if(typeof maplibregl === 'undefined'){
+    $('#offlineMap').classList.remove('hidden');
+    return;
+  }
+  map = new maplibregl.Map({
+    container:'map',
+    style:'https://tiles.openfreemap.org/styles/bright',
+    center:[-3.7038,40.4168],
+    zoom:12,
+    attributionControl:true,
+    localIdeographFontFamily:'Apple SD Gothic Neo'
+  });
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-left');
+
+  map.on('load',()=>{
+    mapLoaded = true;
+    setKoreanLabels();
+
+    map.addSource('trip-route',{
+      type:'geojson',
+      data:{type:'Feature',geometry:{type:'LineString',coordinates:[]}}
+    });
+    map.addLayer({
+      id:'trip-route-line',
+      type:'line',
+      source:'trip-route',
+      layout:{'line-cap':'round','line-join':'round'},
+      paint:{
+        'line-color':'#226fc4',
+        'line-width':4,
+        'line-opacity':0.75,
+        'line-dasharray':[1.4,1.5]
+      }
+    });
+
+    rebuildMap();
+    requestAnimationFrame(()=>map.resize());
+    setTimeout(()=>map.resize(),250);
+  });
+
+  map.on('styledata',()=>{
+    if(mapLoaded) setKoreanLabels();
+  });
+
+  map.on('error',()=>{
+    if(!navigator.onLine) $('#offlineMap').classList.remove('hidden');
+  });
+}
+
+function markerElement(num, color, selected, done){
+  const el=document.createElement('div');
+  el.className='maplibre-route-marker';
+  el.innerHTML=`<div class="route-pin ${selected?'selected':''} ${done?'done':''}" style="background:${color}">${num}</div>`;
+  return el;
+}
+
 function rebuildMap(){
-  if(!map) return;
+  if(!map || !mapLoaded) return;
   markers.forEach(m=>m.remove()); markers=[];
-  if(routeLayer) routeLayer.remove();
-  const day = TRIP.days[currentDayIndex];
-  const color = dayColor(day);
-  const pts = day.items.filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
-  routeLayer = L.polyline(pts.map(x=>[x.lat,x.lng]),{color,weight:4,opacity:.72,dashArray:'7 8'}).addTo(map);
+  const day=TRIP.days[currentDayIndex];
+  const color=dayColor(day);
+  const pts=day.items.filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lng));
+
+  const src=map.getSource('trip-route');
+  if(src){
+    src.setData({
+      type:'Feature',
+      properties:{},
+      geometry:{type:'LineString',coordinates:pts.map(x=>[x.lng,x.lat])}
+    });
+  }
+  if(map.getLayer('trip-route-line')){
+    map.setPaintProperty('trip-route-line','line-color',color);
+  }
+
   day.items.forEach((it,i)=>{
     if(!Number.isFinite(it.lat)||!Number.isFinite(it.lng)) return;
-    const m = L.marker([it.lat,it.lng],{icon:markerIcon(i+1,color,i===currentStopIndex,completed.has(it.id))}).addTo(map);
-    m.on('click',()=>selectStop(i,false));
-    markers.push(m);
+    const el=markerElement(i+1,color,i===currentStopIndex,completed.has(it.id));
+    el.addEventListener('click',()=>selectStop(i,false));
+    const marker=new maplibregl.Marker({element:el,anchor:'center'})
+      .setLngLat([it.lng,it.lat]).addTo(map);
+    markers.push(marker);
   });
   fitRoute();
 }
 
 function updateMarkers(){
-  if(!map) return;
-  const day = TRIP.days[currentDayIndex], color=dayColor(day);
+  if(!map || !mapLoaded) return;
+  const day=TRIP.days[currentDayIndex],color=dayColor(day);
   markers.forEach((m,i)=>{
     const it=day.items[i];
-    m.setIcon(markerIcon(i+1,color,i===currentStopIndex,completed.has(it.id)));
+    const el=m.getElement();
+    el.innerHTML=`<div class="route-pin ${i===currentStopIndex?'selected':''} ${completed.has(it.id)?'done':''}" style="background:${color}">${i+1}</div>`;
   });
 }
 
 function fitRoute(){
-  if(!map) return;
-  const day=TRIP.days[currentDayIndex];
-  const pts=day.items.filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lng)).map(x=>[x.lat,x.lng]);
-  if(pts.length===1) map.setView(pts[0],15,{animate:false});
-  else if(pts.length) map.fitBounds(pts,{padding:[28,28],animate:false});
+  if(!map || !mapLoaded) return;
+  const pts=TRIP.days[currentDayIndex].items.filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lng));
+  if(!pts.length) return;
+  if(pts.length===1){
+    map.jumpTo({center:[pts[0].lng,pts[0].lat],zoom:15});
+    return;
+  }
+  const bounds=new maplibregl.LngLatBounds();
+  pts.forEach(x=>bounds.extend([x.lng,x.lat]));
+  map.fitBounds(bounds,{padding:{top:46,bottom:46,left:40,right:40},duration:0,maxZoom:15});
 }
 
 function centerSelected(){
-  if(!map) return;
+  if(!map || !mapLoaded) return;
   const it=TRIP.days[currentDayIndex].items[currentStopIndex];
-  if(Number.isFinite(it.lat)&&Number.isFinite(it.lng)) map.setView([it.lat,it.lng],15,{animate:true});
+  if(Number.isFinite(it.lat)&&Number.isFinite(it.lng)){
+    map.easeTo({center:[it.lng,it.lat],zoom:15,duration:350});
+  }
 }
 
 function requestMyLocation(center=true){
   if(!navigator.geolocation) return toast('위치 기능을 사용할 수 없습니다.');
   navigator.geolocation.getCurrentPosition(pos=>{
     userLocation={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    if(map){
+    if(map && mapLoaded){
       if(userMarker) userMarker.remove();
-      userMarker=L.circleMarker([userLocation.lat,userLocation.lng],{radius:8,color:'#fff',weight:3,fillColor:'#2385ff',fillOpacity:1}).addTo(map);
-      if(center) map.setView([userLocation.lat,userLocation.lng],15);
+      const el=document.createElement('div');
+      el.className='user-location-marker';
+      userMarker=new maplibregl.Marker({element:el,anchor:'center'})
+        .setLngLat([userLocation.lng,userLocation.lat]).addTo(map);
+      if(center) map.easeTo({center:[userLocation.lng,userLocation.lat],zoom:15,duration:350});
     }
     toast('현재 위치를 확인했습니다.');
   },()=>toast('위치 권한을 허용해 주세요.'),{enableHighAccuracy:true,timeout:8000});
@@ -364,7 +454,7 @@ function updateNetwork(){
   const online=navigator.onLine;
   b.textContent=online?'ONLINE':'OFFLINE';
   b.classList.toggle('offline',!online);
-  if(!online && map) $('#offlineMap').classList.remove('hidden');
+  if(!online) $('#offlineMap').classList.remove('hidden');
   else $('#offlineMap').classList.add('hidden');
 }
 

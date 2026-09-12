@@ -1,4 +1,4 @@
-# Spain Trip V4 — Private PWA
+# Spain Trip V4.1 — Private PWA
 
 ## 핵심 변경
 - 일정/숙소 주소는 `itinerary.enc.json` 안에 AES-256-GCM으로 암호화
@@ -46,3 +46,12 @@
 
 ## PWA 업데이트
 배포 파일을 교체한 뒤 앱 설정의 "앱 업데이트 확인"을 누르거나 앱을 완전히 종료 후 다시 실행하세요.
+
+## V4.1 변경
+- iPhone 15 Pro 폭 기준 날짜 탭/장소 번호 레일의 끝 항목까지 수평 스크롤 가능하도록 수정
+- 카드/이동 영역의 가로 overflow 제거
+- CARTO 지도 제거
+- OpenFreeMap + MapLibre GL로 변경: API Key 불필요
+- 지도 라벨은 `name:ko`가 있는 경우 한국어 우선 표시
+- iOS 로컬 한글 글꼴 렌더링 적용
+- Service Worker 캐시 버전 4.1 및 앱 파일 network-first 업데이트
