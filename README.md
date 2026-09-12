@@ -1,4 +1,4 @@
-# Spain Trip V4.2 — Private PWA
+# Spain Trip V4.3 — Private PWA
 
 ## 핵심 변경
 - 일정/숙소 주소는 `itinerary.enc.json` 안에 AES-256-GCM으로 암호화
@@ -66,3 +66,12 @@
 - 한국어 OSM 이름(name:ko)이 있는 지명은 한글 우선 표시
 - 날짜 변경 전에 기존 마커와 경로를 즉시 제거해서 이전 날짜 번호가 남는 문제 방지
 - 지도 리사이즈/화면 회전 시 canvas 크기 재계산
+
+## V4.3 성능 핫픽스
+- iPhone에서 거의 조작이 안 되던 주 원인 수정
+- 기존에는 MapLibre `styledata` 이벤트가 발생할 때마다 모든 심볼 레이어를 다시 한글화했고,
+  `setLayoutProperty()`가 다시 `styledata`를 발생시켜 반복 재렌더링이 생길 수 있었음
+- `styledata` 재귀 처리 완전 제거
+- 한글화는 필요한 지명 레이어만, 최초 1회, 브라우저 idle 시점에 적용
+- 지도 fade/world-copy/collision 비용 일부 축소
+- Service Worker 캐시 버전 4.3으로 갱신

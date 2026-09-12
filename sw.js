@@ -1,4 +1,4 @@
-const VERSION='spain-trip-v4.2.0';
+const VERSION='spain-trip-v4.3.0';
 const APP=`${VERSION}-app`;
 const RUNTIME=`${VERSION}-runtime`;
 const CORE=['./','./index.html','./styles.css','./app.js','./manifest.webmanifest','./itinerary.enc.json',

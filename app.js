@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '4.2.0';
+const APP_VERSION = '4.3.0';
 const STORE = {
   completed:'spainTrip.completed.v4',
   lastDay:'spainTrip.lastDay.v4',
@@ -261,15 +261,37 @@ function editReservation(r){
   renderPlace(); toast('예약 시간이 이 iPhone에 저장되었습니다.');
 }
 
-function setKoreanLabels(){
-  if(!map || !map.getStyle) return;
-  const layers = map.getStyle().layers || [];
-  layers.forEach(layer=>{
-    if(layer.type !== 'symbol') return;
-    const original = layer.layout && layer.layout['text-field'];
+let koreanLabelsApplied = false;
+
+function setKoreanLabelsOnce(){
+  if(koreanLabelsApplied || !map || !map.getStyle) return;
+
+  // Only update the useful name layers once.
+  // Rewriting every symbol layer repeatedly caused a styledata -> setLayoutProperty
+  // feedback loop on iPhone Safari and made the whole UI almost unresponsive.
+  const layerIds = [
+    'label_country_1','label_country_2','label_country_3',
+    'label_state','label_city_capital','label_city','label_town',
+    'label_village','label_other',
+    'airport',
+    'water_name_line_label','water_name_point_label','waterway_line_label',
+    'highway-name-major','highway-name-minor','highway-name-path'
+  ];
+
+  layerIds.forEach(id=>{
+    const layer = map.getLayer(id);
+    if(!layer) return;
+
+    const original = map.getLayoutProperty(id,'text-field');
     if(!original) return;
+
+    // Do not wrap a layer twice.
     try{
-      map.setLayoutProperty(layer.id,'text-field',[
+      if(JSON.stringify(original).includes('name:ko')) return;
+    }catch(e){}
+
+    try{
+      map.setLayoutProperty(id,'text-field',[
         'coalesce',
         ['get','name:ko'],
         ['get','name_ko'],
@@ -277,6 +299,19 @@ function setKoreanLabels(){
       ]);
     }catch(e){}
   });
+
+  koreanLabelsApplied = true;
+}
+
+function scheduleKoreanLabels(){
+  const run = () => {
+    try{ setKoreanLabelsOnce(); }catch(e){}
+  };
+  if('requestIdleCallback' in window){
+    requestIdleCallback(run, {timeout:1200});
+  }else{
+    setTimeout(run, 450);
+  }
 }
 
 function initMap(){
@@ -290,13 +325,15 @@ function initMap(){
     center:[-3.7038,40.4168],
     zoom:12,
     attributionControl:true,
-    localIdeographFontFamily:'Apple SD Gothic Neo'
+    localIdeographFontFamily:'Apple SD Gothic Neo',
+    renderWorldCopies:false,
+    fadeDuration:0,
+    crossSourceCollisions:false
   });
   map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-left');
 
   map.on('load',()=>{
     mapLoaded = true;
-    setKoreanLabels();
 
     map.addSource('trip-route',{
       type:'geojson',
@@ -319,10 +356,9 @@ function initMap(){
     requestAnimationFrame(()=>map.resize());
     setTimeout(()=>map.resize(),250);
     setTimeout(()=>map.resize(),700);
-  });
 
-  map.on('styledata',()=>{
-    if(mapLoaded) setKoreanLabels();
+    // Korean labels are applied only once and when the browser is idle.
+    scheduleKoreanLabels();
   });
 
   map.on('error',()=>{
