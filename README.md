@@ -1,4 +1,4 @@
-# Spain Trip V4.1 — Private PWA
+# Spain Trip V4.2 — Private PWA
 
 ## 핵심 변경
 - 일정/숙소 주소는 `itinerary.enc.json` 안에 AES-256-GCM으로 암호화
@@ -55,3 +55,14 @@
 - 지도 라벨은 `name:ko`가 있는 경우 한국어 우선 표시
 - iOS 로컬 한글 글꼴 렌더링 적용
 - Service Worker 캐시 버전 4.1 및 앱 파일 network-first 업데이트
+
+## V4.2 변경
+- 앱 전체를 iPhone viewport 너비에 고정: 페이지 자체는 좌우 스크롤되지 않음
+- 날짜와 장소 번호만 독립적인 수평 스크롤러로 분리
+- 날짜 마지막 9/26, 장소 마지막 번호까지 끝 여백 포함
+- 지도/장소 카드/이동/주변정보는 항상 화면 너비 안에 고정
+- MapLibre v6 classic-script 호환 문제 수정: 공식 OpenFreeMap 가이드 방식의 MapLibre v5 사용
+- OpenFreeMap Bright 지도: API Key 불필요
+- 한국어 OSM 이름(name:ko)이 있는 지명은 한글 우선 표시
+- 날짜 변경 전에 기존 마커와 경로를 즉시 제거해서 이전 날짜 번호가 남는 문제 방지
+- 지도 리사이즈/화면 회전 시 canvas 크기 재계산

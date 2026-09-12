@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '4.1.0';
+const APP_VERSION = '4.2.0';
 const STORE = {
   completed:'spainTrip.completed.v4',
   lastDay:'spainTrip.lastDay.v4',
@@ -132,19 +132,23 @@ function dayISO(day){
 }
 function toQueryPlace(item){ return encodeURIComponent(item.address || item.note || item.name); }
 
-function revealHorizontal(container, child){
-  if(!container || !child) return;
-  const left = child.offsetLeft - 14;
-  const right = child.offsetLeft + child.offsetWidth + 22;
-  if(left < container.scrollLeft){
-    container.scrollTo({left:Math.max(0,left),behavior:'smooth'});
-  }else if(right > container.scrollLeft + container.clientWidth){
-    container.scrollTo({left:Math.max(0,right-container.clientWidth),behavior:'smooth'});
+function revealHorizontal(scroller, child){
+  if(!scroller || !child) return;
+  const childLeft = child.offsetLeft;
+  const childRight = childLeft + child.offsetWidth;
+  const visibleLeft = scroller.scrollLeft + 8;
+  const visibleRight = scroller.scrollLeft + scroller.clientWidth - 16;
+
+  if(childLeft < visibleLeft){
+    scroller.scrollTo({left:Math.max(0, childLeft - 14), behavior:'smooth'});
+  }else if(childRight > visibleRight){
+    scroller.scrollTo({left:Math.max(0, childRight - scroller.clientWidth + 24), behavior:'smooth'});
   }
 }
 
 function renderTabs(){
   const wrap = $('#dateTabs');
+  const scroller = wrap.parentElement;
   wrap.innerHTML = '';
   TRIP.days.forEach((d,i) => {
     const btn = document.createElement('button');
@@ -152,14 +156,18 @@ function renderTabs(){
     if(i===currentDayIndex) btn.style.background = dayColor(d);
     btn.innerHTML = `<strong>${d.date}</strong><span>${d.city==='Madrid'?'MAD':d.city==='Barcelona'?'BCN':'MOVE'}</span>`;
     btn.onclick = () => {
+      if(i === currentDayIndex) return;
+      clearMapVisuals();
       currentDayIndex = i;
       currentStopIndex = 0;
       saveSelection();
-      renderTabs(); renderDay(); rebuildMap();
+      renderTabs();
+      renderDay();
+      rebuildMap();
     };
     wrap.appendChild(btn);
   });
-  requestAnimationFrame(()=>revealHorizontal(wrap, wrap.children[currentDayIndex]));
+  requestAnimationFrame(()=>revealHorizontal(scroller, wrap.children[currentDayIndex]));
 }
 
 function renderDay(){
@@ -178,6 +186,7 @@ function renderDay(){
 function renderStepRail(){
   const day = TRIP.days[currentDayIndex];
   const rail = $('#stepRail');
+  const scroller = rail.parentElement;
   rail.innerHTML = '';
   day.items.forEach((it,i)=>{
     const b = document.createElement('button');
@@ -187,7 +196,7 @@ function renderStepRail(){
     b.onclick = () => selectStop(i, true);
     rail.appendChild(b);
   });
-  requestAnimationFrame(()=>revealHorizontal(rail, rail.children[currentStopIndex]));
+  requestAnimationFrame(()=>revealHorizontal(scroller, rail.children[currentStopIndex]));
 }
 
 function reservationFor(item){
@@ -309,6 +318,7 @@ function initMap(){
     rebuildMap();
     requestAnimationFrame(()=>map.resize());
     setTimeout(()=>map.resize(),250);
+    setTimeout(()=>map.resize(),700);
   });
 
   map.on('styledata',()=>{
@@ -327,9 +337,30 @@ function markerElement(num, color, selected, done){
   return el;
 }
 
+function clearMapVisuals(){
+  markers.forEach(entry=>{
+    try{
+      const marker = entry && entry.marker ? entry.marker : entry;
+      marker.remove();
+    }catch(e){}
+  });
+  markers=[];
+
+  if(map && mapLoaded){
+    const src=map.getSource('trip-route');
+    if(src){
+      src.setData({
+        type:'Feature',
+        properties:{},
+        geometry:{type:'LineString',coordinates:[]}
+      });
+    }
+  }
+}
+
 function rebuildMap(){
   if(!map || !mapLoaded) return;
-  markers.forEach(m=>m.remove()); markers=[];
+  clearMapVisuals();
   const day=TRIP.days[currentDayIndex];
   const color=dayColor(day);
   const pts=day.items.filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lng));
@@ -352,7 +383,7 @@ function rebuildMap(){
     el.addEventListener('click',()=>selectStop(i,false));
     const marker=new maplibregl.Marker({element:el,anchor:'center'})
       .setLngLat([it.lng,it.lat]).addTo(map);
-    markers.push(marker);
+    markers.push({marker,itemIndex:i});
   });
   fitRoute();
 }
@@ -360,9 +391,11 @@ function rebuildMap(){
 function updateMarkers(){
   if(!map || !mapLoaded) return;
   const day=TRIP.days[currentDayIndex],color=dayColor(day);
-  markers.forEach((m,i)=>{
+  markers.forEach(entry=>{
+    const i=entry.itemIndex;
     const it=day.items[i];
-    const el=m.getElement();
+    if(!it) return;
+    const el=entry.marker.getElement();
     el.innerHTML=`<div class="route-pin ${i===currentStopIndex?'selected':''} ${completed.has(it.id)?'done':''}" style="background:${color}">${i+1}</div>`;
   });
 }
@@ -596,6 +629,8 @@ async function bootstrap(){
   $('#versionText').textContent=`v${APP_VERSION}`;
   window.addEventListener('online',()=>{updateNetwork();loadWeather(false);});
   window.addEventListener('offline',updateNetwork);
+  window.addEventListener('resize',()=>{ if(map && mapLoaded) setTimeout(()=>map.resize(),60); });
+  window.addEventListener('orientationchange',()=>{ if(map && mapLoaded) setTimeout(()=>map.resize(),250); });
 }
 bootstrap();
 
